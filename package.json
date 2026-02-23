@@ -1,0 +1,28 @@
+{
+  "name": "mirror",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/dompurify": "^3.2.0",
+    "@types/jsdom": "^28.0.0",
+    "@types/marked": "^6.0.0",
+    "@types/node": "^25.3.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.9",
+    "dompurify": "^3.3.1",
+    "hono": "^4.12.2",
+    "jsdom": "^28.1.0",
+    "marked": "^17.0.3",
+    "marked-gfm-heading-id": "^4.1.3"
+  }
+}
