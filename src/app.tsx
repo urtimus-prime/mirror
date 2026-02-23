@@ -2,8 +2,7 @@
 import { Hono } from 'hono'
 import { marked } from 'marked'
 import { gfmHeadingId } from 'marked-gfm-heading-id'
-import DOMPurify from 'dompurify'
-import { JSDOM } from 'jsdom'
+import sanitizeHtml from 'sanitize-html'
 import { Layout } from './components/Layout.js'
 
 // Configure marked with GitHub Flavored Markdown heading IDs
@@ -11,9 +10,7 @@ marked.use(gfmHeadingId())
 
 const app = new Hono()
 
-// Configure DOMPurify for Node.js
-const window = new JSDOM('').window
-const purify = DOMPurify(window as any)
+
 
 app.get('/soul/:provider/:username', async (c) => {
     const provider = c.req.param('provider')
@@ -55,7 +52,15 @@ app.get('/soul/:provider/:username', async (c) => {
     // Parse markdown securely
     const rawHtml = await marked.parse(markdownContent)
     // We sanitize the parsed HTML to avoid XSS
-    const cleanHtml = purify.sanitize(rawHtml)
+    const cleanHtml = sanitizeHtml(rawHtml, {
+        allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'a', 'ul', 'ol', 'li', 'b', 'i', 'strong', 'em', 'strike', 'code', 'hr', 'br', 'div', 'table', 'thead', 'caption', 'tbody', 'tr', 'th', 'td', 'pre']),
+        allowedAttributes: {
+            ...sanitizeHtml.defaults.allowedAttributes,
+            '*': ['class', 'id'],
+            'a': ['href', 'name', 'target'],
+            'img': ['src', 'alt']
+        }
+    })
 
     const ProviderAvatar = () => {
         if (provider === 'github') {
