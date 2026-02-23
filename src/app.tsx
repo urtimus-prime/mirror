@@ -1,3 +1,4 @@
+/** @jsxImportSource hono/jsx */
 
 import { Hono } from 'hono'
 import { marked } from 'marked'

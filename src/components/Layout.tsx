@@ -1,7 +1,9 @@
+/** @jsxImportSource hono/jsx */
+
 import { html } from 'hono/html'
 
 export const Layout = (props: { children: any; title: string }) => {
-    return html`
+  return html`
     <!DOCTYPE html>
     <html lang="en" class="dark">
       <head>
