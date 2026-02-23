@@ -4,7 +4,7 @@ import { Hono } from 'hono'
 import { marked } from 'marked'
 import { gfmHeadingId } from 'marked-gfm-heading-id'
 import sanitizeHtml from 'sanitize-html'
-import { Layout } from './components/Layout'
+import { Layout } from './components/Layout.js'
 
 // Configure marked with GitHub Flavored Markdown heading IDs
 marked.use(gfmHeadingId())
