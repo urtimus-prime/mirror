@@ -29,6 +29,7 @@ export default async function handler(req: any, res: any) {
     }
 
     let markdownContent = ''
+    let profileImageUrl = ''
 
     if (provider === 'github.com') {
       let r = await fetch(`https://raw.githubusercontent.com/${username}/${username}/main/README.md`)
@@ -42,6 +43,23 @@ export default async function handler(req: any, res: any) {
       }
     } else {
       // It's a gitlab instance (e.g. gitlab.com, gitlab.crux.casa)
+
+      // 1. Fetch the user's HTML profile page to scrape their avatar using `og:image`
+      try {
+        const profileRes = await fetch(`https://${provider}/${username}`)
+        if (profileRes.ok) {
+          const htmlText = await profileRes.text()
+          const match = htmlText.match(/<meta[^>]*property="og:image"[^>]*content="([^"]+)"/i) ||
+            htmlText.match(/<meta[^>]*content="([^"]+)"[^>]*property="og:image"/i)
+          if (match && match[1]) {
+            profileImageUrl = match[1]
+          }
+        }
+      } catch (err) {
+        console.error('Failed to parse gitlab avatar', err)
+      }
+
+      // 2. Fetch the actual README
       let r = await fetch(`https://${provider}/${username}/${username}/-/raw/main/README.md`)
       if (!r.ok) {
         r = await fetch(`https://${provider}/${username}/${username}/-/raw/master/README.md`)
@@ -66,9 +84,14 @@ export default async function handler(req: any, res: any) {
 
     const isGithub = provider === 'github.com'
     const dotColor = isGithub ? 'bg-purple-500' : 'bg-orange-500'
-    const avatarHtml = isGithub
-      ? `<img src="https://github.com/${username}.png" alt="${username}" class="w-20 h-20 rounded-full border-2 border-purple-500/50 shadow-lg shadow-purple-500/20" />`
-      : `<div class="w-20 h-20 rounded-full border-2 border-orange-500/50 bg-zinc-900 flex items-center justify-center shadow-lg shadow-orange-500/20"><span class="text-2xl font-bold text-zinc-500">${username.charAt(0).toUpperCase()}</span></div>`
+
+    let avatarHtml = `<div class="w-20 h-20 rounded-full border-2 border-orange-500/50 bg-zinc-900 flex items-center justify-center shadow-lg shadow-orange-500/20"><span class="text-2xl font-bold text-zinc-500">${username.charAt(0).toUpperCase()}</span></div>`
+
+    if (isGithub) {
+      avatarHtml = `<img src="https://github.com/${username}.png" alt="${username}" class="w-20 h-20 rounded-full border-2 border-purple-500/50 shadow-lg shadow-purple-500/20" />`
+    } else if (profileImageUrl) {
+      avatarHtml = `<img src="${profileImageUrl}" alt="${username}" class="w-20 h-20 rounded-full border-2 border-orange-500/50 shadow-lg shadow-orange-500/20 object-cover" />`
+    }
 
     const html = `<!DOCTYPE html>
 <html lang="en" class="dark">
