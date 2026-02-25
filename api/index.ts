@@ -10,6 +10,9 @@ export default async function handler(req: any, res: any) {
     const parts = urlStr.split('?')[0].split('/').filter(Boolean)
     // Example: ['soul', 'github', 'voxxelle']
 
+    console.log('Incoming Vercel URL:', urlStr)
+    console.log('Extracted Parts:', parts)
+
     if (parts.length < 3) {
       return res.status(404).send('Not Found')
     }
