@@ -5,63 +5,67 @@ import sanitizeHtml from 'sanitize-html'
 marked.use(gfmHeadingId())
 
 export default async function handler(req: any, res: any) {
-    try {
-        const urlStr = req.url || ''
-        const parts = urlStr.split('?')[0].split('/').filter(Boolean)
-        // Example: ['soul', 'github', 'voxxelle']
+  try {
+    const urlStr = req.url || ''
+    const parts = urlStr.split('?')[0].split('/').filter(Boolean)
+    // Example: ['soul', 'github', 'voxxelle']
 
-        if (parts.length < 3) {
-            return res.status(404).send('Not Found')
-        }
+    if (parts.length < 3) {
+      return res.status(404).send('Not Found')
+    }
 
-        const provider = parts[1]
-        const username = parts[2]
+    const provider = parts[1] // Can be github.com, gitlab.com, gitlab.crux.casa, etc.
+    const username = parts[2]
 
-        if (provider !== 'github' && provider !== 'gitlab') {
-            return res.status(404).send('Not Found')
-        }
+    // Allow github.com and any domain that contains gitlab
+    if (provider !== 'github.com' && provider !== 'github' && !provider.includes('gitlab')) {
+      return res.status(404).send('Not Found')
+    }
 
-        let markdownContent = ''
+    let markdownContent = ''
 
-        if (provider === 'github') {
-            let r = await fetch(`https://raw.githubusercontent.com/${username}/${username}/main/README.md`)
-            if (!r.ok) {
-                r = await fetch(`https://raw.githubusercontent.com/${username}/${username}/master/README.md`)
-            }
-            if (r.ok) {
-                markdownContent = await r.text()
-            } else {
-                return res.status(404).send('Profile not found on GitHub')
-            }
-        } else {
-            let r = await fetch(`https://gitlab.com/${username}/${username}/-/raw/main/README.md`)
-            if (!r.ok) {
-                r = await fetch(`https://gitlab.com/${username}/${username}/-/raw/master/README.md`)
-            }
-            if (r.ok) {
-                markdownContent = await r.text()
-            } else {
-                return res.status(404).send('Profile not found on GitLab')
-            }
-        }
+    if (provider === 'github' || provider === 'github.com') {
+      let r = await fetch(`https://raw.githubusercontent.com/${username}/${username}/main/README.md`)
+      if (!r.ok) {
+        r = await fetch(`https://raw.githubusercontent.com/${username}/${username}/master/README.md`)
+      }
+      if (r.ok) {
+        markdownContent = await r.text()
+      } else {
+        return res.status(404).send('Profile not found on GitHub')
+      }
+    } else {
+      // It's a gitlab instance (e.g. gitlab.com, gitlab.crux.casa)
+      const host = provider === 'gitlab' ? 'gitlab.com' : provider
+      let r = await fetch(`https://${host}/${username}/${username}/-/raw/main/README.md`)
+      if (!r.ok) {
+        r = await fetch(`https://${host}/${username}/${username}/-/raw/master/README.md`)
+      }
+      if (r.ok) {
+        markdownContent = await r.text()
+      } else {
+        return res.status(404).send(`Profile not found on ${host}`)
+      }
+    }
 
-        const rawHtml = await marked.parse(markdownContent)
-        const cleanHtml = sanitizeHtml(rawHtml, {
-            allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'a', 'ul', 'ol', 'li', 'b', 'i', 'strong', 'em', 'strike', 'code', 'hr', 'br', 'div', 'table', 'thead', 'caption', 'tbody', 'tr', 'th', 'td', 'pre']),
-            allowedAttributes: {
-                ...sanitizeHtml.defaults.allowedAttributes,
-                '*': ['class', 'id'],
-                'a': ['href', 'name', 'target', 'rel'],
-                'img': ['src', 'alt']
-            }
-        })
+    const rawHtml = await marked.parse(markdownContent)
+    const cleanHtml = sanitizeHtml(rawHtml, {
+      allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'a', 'ul', 'ol', 'li', 'b', 'i', 'strong', 'em', 'strike', 'code', 'hr', 'br', 'div', 'table', 'thead', 'caption', 'tbody', 'tr', 'th', 'td', 'pre']),
+      allowedAttributes: {
+        ...sanitizeHtml.defaults.allowedAttributes,
+        '*': ['class', 'id'],
+        'a': ['href', 'name', 'target', 'rel'],
+        'img': ['src', 'alt']
+      }
+    })
 
-        const dotColor = provider === 'github' ? 'bg-purple-500' : 'bg-orange-500'
-        const avatarHtml = provider === 'github'
-            ? `<img src="https://github.com/${username}.png" alt="${username}" class="w-20 h-20 rounded-full border-2 border-purple-500/50 shadow-lg shadow-purple-500/20" />`
-            : `<div class="w-20 h-20 rounded-full border-2 border-orange-500/50 bg-zinc-900 flex items-center justify-center shadow-lg shadow-orange-500/20"><span class="text-2xl font-bold text-zinc-500">${username.charAt(0).toUpperCase()}</span></div>`
+    const isGithub = provider === 'github' || provider === 'github.com'
+    const dotColor = isGithub ? 'bg-purple-500' : 'bg-orange-500'
+    const avatarHtml = isGithub
+      ? `<img src="https://github.com/${username}.png" alt="${username}" class="w-20 h-20 rounded-full border-2 border-purple-500/50 shadow-lg shadow-purple-500/20" />`
+      : `<div class="w-20 h-20 rounded-full border-2 border-orange-500/50 bg-zinc-900 flex items-center justify-center shadow-lg shadow-orange-500/20"><span class="text-2xl font-bold text-zinc-500">${username.charAt(0).toUpperCase()}</span></div>`
 
-        const html = `<!DOCTYPE html>
+    const html = `<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
   <meta charset="utf-8" />
@@ -97,7 +101,7 @@ export default async function handler(req: any, res: any) {
           </h1>
           <p class="text-zinc-400 capitalize flex items-center gap-2 mt-1">
             <span class="w-2 h-2 rounded-full ${dotColor} animate-pulse"></span>
-            ${provider} Soul Entity
+            ${provider === 'github' || provider === 'github.com' ? 'GitHub' : provider} Soul Entity
           </p>
         </div>
       </div>
@@ -109,12 +113,12 @@ export default async function handler(req: any, res: any) {
 </body>
 </html>`
 
-        res.setHeader('Content-Type', 'text/html; charset=utf-8')
-        res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate')
-        return res.status(200).send(html)
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate')
+    return res.status(200).send(html)
 
-    } catch (error) {
-        console.error('Render error:', error)
-        return res.status(500).send('Internal Server Error')
-    }
+  } catch (error) {
+    console.error('Render error:', error)
+    return res.status(500).send('Internal Server Error')
+  }
 }
