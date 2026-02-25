@@ -17,14 +17,17 @@ export default async function handler(req: any, res: any) {
     const provider = parts[1] // Can be github.com, gitlab.com, gitlab.crux.casa, etc.
     const username = parts[2]
 
-    // Allow github.com and any domain that contains gitlab
-    if (provider !== 'github.com' && provider !== 'github' && !provider.includes('gitlab')) {
-      return res.status(404).send('Not Found')
+    if (provider === 'github') return res.redirect('/soul/github.com/' + username)
+    if (provider === 'gitlab') return res.redirect('/soul/gitlab.com/' + username)
+
+    // Allow any .com, .org, .net, .casa etc
+    if (!provider.includes('.')) {
+      return res.status(404).send('Invalid Provider Hostname')
     }
 
     let markdownContent = ''
 
-    if (provider === 'github' || provider === 'github.com') {
+    if (provider === 'github.com') {
       let r = await fetch(`https://raw.githubusercontent.com/${username}/${username}/main/README.md`)
       if (!r.ok) {
         r = await fetch(`https://raw.githubusercontent.com/${username}/${username}/master/README.md`)
@@ -36,15 +39,14 @@ export default async function handler(req: any, res: any) {
       }
     } else {
       // It's a gitlab instance (e.g. gitlab.com, gitlab.crux.casa)
-      const host = provider === 'gitlab' ? 'gitlab.com' : provider
-      let r = await fetch(`https://${host}/${username}/${username}/-/raw/main/README.md`)
+      let r = await fetch(`https://${provider}/${username}/${username}/-/raw/main/README.md`)
       if (!r.ok) {
-        r = await fetch(`https://${host}/${username}/${username}/-/raw/master/README.md`)
+        r = await fetch(`https://${provider}/${username}/${username}/-/raw/master/README.md`)
       }
       if (r.ok) {
         markdownContent = await r.text()
       } else {
-        return res.status(404).send(`Profile not found on ${host}`)
+        return res.status(404).send(`Profile not found on ${provider}`)
       }
     }
 
@@ -59,7 +61,7 @@ export default async function handler(req: any, res: any) {
       }
     })
 
-    const isGithub = provider === 'github' || provider === 'github.com'
+    const isGithub = provider === 'github.com'
     const dotColor = isGithub ? 'bg-purple-500' : 'bg-orange-500'
     const avatarHtml = isGithub
       ? `<img src="https://github.com/${username}.png" alt="${username}" class="w-20 h-20 rounded-full border-2 border-purple-500/50 shadow-lg shadow-purple-500/20" />`
@@ -101,7 +103,7 @@ export default async function handler(req: any, res: any) {
           </h1>
           <p class="text-zinc-400 capitalize flex items-center gap-2 mt-1">
             <span class="w-2 h-2 rounded-full ${dotColor} animate-pulse"></span>
-            ${provider === 'github' || provider === 'github.com' ? 'GitHub' : provider} Soul Entity
+            ${provider === 'github.com' ? 'GitHub' : provider} Soul Entity
           </p>
         </div>
       </div>
