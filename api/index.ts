@@ -1,8 +1,19 @@
 import { marked } from 'marked'
 import { gfmHeadingId } from 'marked-gfm-heading-id'
+import { markedEmoji } from 'marked-emoji'
+import { gemoji } from 'gemoji'
 import sanitizeHtml from 'sanitize-html'
 
+// Build unicode emoji map from gemoji: { "joy": "😂", "heart": "❤️", ... }
+const emojis: Record<string, string> = {}
+for (const gem of gemoji) {
+  for (const name of gem.names) {
+    emojis[name] = gem.emoji
+  }
+}
+
 marked.use(gfmHeadingId())
+marked.use(markedEmoji({ emojis, renderer: (token) => token.emoji }))
 
 export default async function handler(req: any, res: any) {
   try {

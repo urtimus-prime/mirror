@@ -3,11 +3,22 @@
 import { Hono } from 'hono'
 import { marked } from 'marked'
 import { gfmHeadingId } from 'marked-gfm-heading-id'
+import { markedEmoji } from 'marked-emoji'
+import { gemoji } from 'gemoji'
 import sanitizeHtml from 'sanitize-html'
 import { Layout } from './components/Layout.js'
 
-// Configure marked with GitHub Flavored Markdown heading IDs
+// Build unicode emoji map from gemoji
+const emojis: Record<string, string> = {}
+for (const gem of gemoji) {
+  for (const name of gem.names) {
+    emojis[name] = gem.emoji
+  }
+}
+
+// Configure marked with GitHub Flavored Markdown heading IDs and emoji support
 marked.use(gfmHeadingId())
+marked.use(markedEmoji({ emojis, renderer: (token) => token.emoji }))
 
 const app = new Hono()
 
