@@ -50,8 +50,18 @@ app.get('/soul/:provider/:username', async (c) => {
         return c.text('Failed to fetch profile', 500)
     }
 
+    // Rewrite relative image/link URLs to point to raw GitHub/GitLab content
+    const baseRawUrl = provider === 'github'
+        ? `https://raw.githubusercontent.com/${username}/${username}/main/`
+        : `https://gitlab.com/${username}/${username}/-/raw/main/`
+
+    const rewrittenMarkdown = markdownContent.replace(
+        /!\[([^\]]*)\]\((?!https?:\/\/|\/\/)([^)]+)\)/g,
+        (_, alt, path) => `![${alt}](${baseRawUrl}${path})`
+    )
+
     // Parse markdown securely
-    const rawHtml = await marked.parse(markdownContent)
+    const rawHtml = await marked.parse(rewrittenMarkdown)
     // We sanitize the parsed HTML to avoid XSS
     const cleanHtml = sanitizeHtml(rawHtml, {
         allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'a', 'ul', 'ol', 'li', 'b', 'i', 'strong', 'em', 'strike', 'code', 'hr', 'br', 'div', 'table', 'thead', 'caption', 'tbody', 'tr', 'th', 'td', 'pre']),

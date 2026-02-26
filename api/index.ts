@@ -71,7 +71,19 @@ export default async function handler(req: any, res: any) {
       }
     }
 
-    const rawHtml = await marked.parse(markdownContent)
+    // Rewrite relative image URLs to point to raw content on the provider
+    let baseRawUrl = ''
+    if (provider === 'github.com') {
+      baseRawUrl = `https://raw.githubusercontent.com/${username}/${username}/main/`
+    } else {
+      baseRawUrl = `https://${provider}/${username}/${username}/-/raw/main/`
+    }
+    const rewrittenMarkdown = markdownContent.replace(
+      /!\[([^\]]*)\]\((?!https?:\/\/|\/\/)([^)]+)\)/g,
+      (_, alt, path) => `![${alt}](${baseRawUrl}${path})`
+    )
+
+    const rawHtml = await marked.parse(rewrittenMarkdown)
     const cleanHtml = sanitizeHtml(rawHtml, {
       allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'a', 'ul', 'ol', 'li', 'b', 'i', 'strong', 'em', 'strike', 'code', 'hr', 'br', 'div', 'table', 'thead', 'caption', 'tbody', 'tr', 'th', 'td', 'pre']),
       allowedAttributes: {
