@@ -1,6 +1,9 @@
 import crypto from 'node:crypto';
 import sshpk from 'sshpk';
-
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execSync } from 'node:child_process';
 const SECRET_KEY = process.env.CHALLENGE_SECRET || crypto.randomBytes(32).toString('hex');
 
 export function generateChallenge(provider: string, username: string): string {
@@ -31,41 +34,32 @@ export function verifyChallenge(challenge: string, provider: string, username: s
     return crypto.timingSafeEqual(challengeHmacBuffer, expectedHmacBuffer);
 }
 
-/**
- * Verifies a signature produced by `ssh-keygen -Y sign`.
- * Note: OpenSSH signatures have a specific armored format.
- * We might need an external library to parse them properly if they use the raw ASCII armor.
- * For now, we assume standard sshpk verification if they provide an RFC5656 signature 
- * or similar easily parseable base64 blob.
- */
-export function verifySignature(challenge: string, signatureBase64: string, publicKey: string): boolean {
+export function verifySignature(challenge: string, signatureRawText: string, publicKey: string): boolean {
+    // Determine user namespace identifier
+    // We allow any identifier, but to be clean, let's use the public key hash or just 'user'
+    const identifier = 'user';
+
+    const randomSuffix = crypto.randomBytes(8).toString('hex');
+    const tmpDir = os.tmpdir();
+
+    const allowedSignersPath = path.join(tmpDir, `allowed_signers_${randomSuffix}`);
+    const challengePath = path.join(tmpDir, `chal_${randomSuffix}`);
+    const sigPath = path.join(tmpDir, `chal_${randomSuffix}.sig`);
+
     try {
-        const key = sshpk.parseKey(publicKey, 'ssh');
+        fs.writeFileSync(allowedSignersPath, `${identifier} ${publicKey}\n`);
+        fs.writeFileSync(challengePath, challenge);
+        fs.writeFileSync(sigPath, signatureRawText);
 
-        const verifier = key.createVerify('sha512');
-        verifier.update(challenge);
+        execSync(`ssh-keygen -Y verify -f ${allowedSignersPath} -I ${identifier} -n file -s ${sigPath} < ${challengePath}`, { stdio: 'ignore' });
 
-        let sig: sshpk.Signature;
-        try {
-            // First try parsing as an 'ssh' format signature
-            sig = sshpk.parseSignature(signatureBase64, key.type as sshpk.AlgorithmType, 'ssh');
-        } catch (e1) {
-            try {
-                // If it's a raw ASN.1 signature (default output of crypto.sign)
-                sig = sshpk.parseSignature(signatureBase64, key.type as sshpk.AlgorithmType, 'asn1');
-            } catch (e2) {
-                // If it's pure raw bytes (like an ed25519 64-byte signature)
-                const buf = Buffer.from(signatureBase64, 'base64');
-                // For raw ed25519 the signature is just the 64 bytes. sshpk doesn't natively have a 'raw' format to pass directly, but we can construct it manually, or we can try 'ssh' after wrapping.
-                // However, the sshpk library does fall back to raw if we pass an explicit `sshpk.Signature` object.
-                // Or we can just use `crypto.verify` directly for raw ed25519 since node v12+
-                sig = sshpk.parseSignature(buf, key.type as sshpk.AlgorithmType, 'asn1');
-            }
-        }
-
-        return verifier.verify(sig);
+        return true;
     } catch (err) {
-        console.error('Signature verification failed:', err);
+        console.error('Signature verification via ssh-keygen failed');
         return false;
+    } finally {
+        try { if (fs.existsSync(allowedSignersPath)) fs.unlinkSync(allowedSignersPath); } catch (e) { }
+        try { if (fs.existsSync(challengePath)) fs.unlinkSync(challengePath); } catch (e) { }
+        try { if (fs.existsSync(sigPath)) fs.unlinkSync(sigPath); } catch (e) { }
     }
 }
