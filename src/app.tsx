@@ -11,9 +11,9 @@ import { Layout } from './components/Layout.js'
 // Build unicode emoji map from gemoji
 const emojis: Record<string, string> = {}
 for (const gem of gemoji) {
-  for (const name of gem.names) {
-    emojis[name] = gem.emoji
-  }
+    for (const name of gem.names) {
+        emojis[name] = gem.emoji
+    }
 }
 
 // Configure marked with GitHub Flavored Markdown heading IDs and emoji support
@@ -23,6 +23,79 @@ marked.use(markedEmoji({ emojis, renderer: (token) => token.emoji }))
 const app = new Hono()
 
 
+import { generateChallenge, verifyChallenge, verifySignature } from './auth.js'
+import { getVerificationTime, markVerified } from './store.js'
+
+app.get('/api/auth/challenge', (c) => {
+    const provider = c.req.query('provider')
+    const username = c.req.query('username')
+
+    if (!provider || !username) {
+        return c.json({ error: 'provider and username are required' }, 400)
+    }
+
+    // Support github.com and gitlab.com/etc (normalize 'github' to 'github.com' if needed)
+    const normalizedProvider = provider === 'github' ? 'github.com' : provider
+    const challenge = generateChallenge(normalizedProvider, username)
+    return c.json({ challenge })
+})
+
+app.post('/api/auth/verify', async (c) => {
+    try {
+        const body = await c.req.json()
+        const { provider, username, challenge, signature } = body
+
+        if (!provider || !username || !challenge || !signature) {
+            return c.json({ error: 'Missing required fields' }, 400)
+        }
+
+        const normalizedProvider = provider === 'github' ? 'github.com' : provider
+
+        if (!verifyChallenge(challenge, normalizedProvider, username)) {
+            return c.json({ error: 'Invalid or expired challenge' }, 400)
+        }
+
+        // Fetch keys from provider
+        let keysUrl = ''
+        if (normalizedProvider === 'github.com') {
+            keysUrl = `https://github.com/${username}.keys`
+        } else {
+            // GitLab uses standard .keys suffix on users
+            keysUrl = `https://${normalizedProvider}/${username}.keys`
+        }
+
+        const keysRes = await fetch(keysUrl)
+        if (!keysRes.ok) {
+            return c.json({ error: 'Could not fetch public keys for user' }, 404)
+        }
+
+        const keysText = await keysRes.text()
+        const keys = keysText.split('\n').filter(k => k.trim().length > 0)
+
+        if (keys.length === 0) {
+            return c.json({ error: 'No public keys found for user' }, 404)
+        }
+
+        let isValid = false
+        for (const key of keys) {
+            if (verifySignature(challenge, signature, key)) {
+                isValid = true
+                break
+            }
+        }
+
+        if (!isValid) {
+            return c.json({ error: 'Signature verification failed' }, 401)
+        }
+
+        await markVerified(normalizedProvider, username)
+
+        return c.json({ success: true, message: 'Identity verified' })
+    } catch (err) {
+        console.error('Verify error:', err)
+        return c.json({ error: 'Internal server error' }, 500)
+    }
+})
 
 app.get('/soul/:provider/:username', async (c) => {
     const provider = c.req.param('provider')
@@ -102,14 +175,25 @@ app.get('/soul/:provider/:username', async (c) => {
         }
     }
 
+    const normalizedProvider = provider === 'github' ? 'github.com' : provider;
+    const verifiedTime = await getVerificationTime(normalizedProvider, username);
+
     return c.html(
         <Layout title={`${username} on Apocalypse Radio`}>
             <div class="max-w-4xl mx-auto py-12 px-4 shadow-xl shadow-purple-900/10 rounded-2xl border border-zinc-800/50 bg-black/40 backdrop-blur-md">
-                <div class="mb-10 flex items-center gap-6 border-b border-zinc-800 pb-6">
+                <div class="mb-10 flex items-center gap-6 border-b border-zinc-800 pb-6 relative">
                     <ProviderAvatar />
                     <div>
-                        <h1 class="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400">
+                        <h1 class="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400 flex items-center gap-3">
                             {username}
+                            {verifiedTime && (
+                                <span class="bg-green-500/20 text-green-400 text-xs font-semibold px-2 py-1 rounded-full border border-green-500/30 flex items-center gap-1 shadow-sm shadow-green-500/10 cursor-help" title={`Verified on: ${new Date(verifiedTime).toLocaleString()}`}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                    Soul Verified
+                                </span>
+                            )}
                         </h1>
                         <p class="text-zinc-400 capitalize flex items-center gap-2 mt-1">
                             <span class={`w-2 h-2 rounded-full ${provider === 'github' ? 'bg-purple-500' : 'bg-orange-500'} animate-pulse`}></span>
@@ -128,3 +212,4 @@ app.get('/soul/:provider/:username', async (c) => {
 })
 
 export default app
+
