@@ -24,6 +24,74 @@ export default async function handler(req: any, res: any) {
     console.log('Incoming Vercel URL:', urlStr)
     console.log('Extracted Parts:', parts)
 
+    if (parts.length === 0) {
+      // Serve README.md on the root page
+      let markdownContent = '';
+      try {
+        const fs = await import('fs');
+        const path = await import('path');
+        const readmePath = path.join(process.cwd(), 'README.md');
+        if (fs.existsSync(readmePath)) {
+          markdownContent = fs.readFileSync(readmePath, 'utf8');
+        } else {
+          markdownContent = '# Apocalypse Radio Mirror\\nWelcome to the mirror.';
+        }
+      } catch (e) {
+        markdownContent = '# Apocalypse Radio Mirror\\nWelcome to the mirror.';
+      }
+
+      const rawHtml = await marked.parse(markdownContent);
+      const cleanHtml = sanitizeHtml(rawHtml, {
+        allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'a', 'ul', 'ol', 'li', 'b', 'i', 'strong', 'em', 'strike', 'code', 'hr', 'br', 'div', 'table', 'thead', 'caption', 'tbody', 'tr', 'th', 'td', 'pre']),
+        allowedAttributes: {
+          ...sanitizeHtml.defaults.allowedAttributes,
+          '*': ['class', 'id'],
+          'a': ['href', 'name', 'target', 'rel'],
+          'img': ['src', 'alt']
+        }
+      });
+
+      const html = `<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Apocalypse Radio Mirror</title>
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <script>
+    tailwind.config = { darkMode: 'class', theme: { extend: {} } }
+  </script>
+  <style>
+    body { background-color: black; color: white; min-height: 100vh; }
+    .prose {
+      --tw-prose-body: #d4d4d8; --tw-prose-headings: #fff;
+      --tw-prose-links: #c084fc; --tw-prose-bold: #fff;
+      --tw-prose-counters: #a1a1aa; --tw-prose-bullets: #52525b;
+      --tw-prose-hr: #3f3f46; --tw-prose-quotes: #f4f4f5;
+      --tw-prose-quote-borders: #3f3f46; --tw-prose-captions: #a1a1aa;
+      --tw-prose-code: #fff; --tw-prose-pre-code: #e4e4e7;
+      --tw-prose-pre-bg: #18181b; --tw-prose-th-borders: #52525b;
+      --tw-prose-td-borders: #3f3f46;
+    }
+    .prose a:hover { color: #d8b4fe; }
+  </style>
+</head>
+<body>
+  <main class="max-w-6xl mx-auto px-4 py-8 pb-24">
+    <div class="max-w-4xl mx-auto py-12 px-8 shadow-xl shadow-purple-900/10 rounded-2xl border border-zinc-800/50 bg-black/40 backdrop-blur-md">
+      <div class="prose prose-invert prose-zinc prose-headings:font-bold prose-h1:text-4xl prose-h2:text-2xl prose-a:text-purple-400 prose-a:no-underline hover:prose-a:text-purple-300 max-w-none">
+        ${cleanHtml}
+      </div>
+    </div>
+  </main>
+</body>
+</html>`;
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate');
+      return res.status(200).send(html);
+    }
+
     if (parts.length < 3) {
       return res.status(404).send('Not Found')
     }
