@@ -3,6 +3,7 @@ import { gfmHeadingId } from 'marked-gfm-heading-id'
 import { markedEmoji } from 'marked-emoji'
 import { gemoji } from 'gemoji'
 import sanitizeHtml from 'sanitize-html'
+import { README_CONTENT } from '../src/readme.js'
 
 // Build unicode emoji map from gemoji: { "joy": "😂", "heart": "❤️", ... }
 const emojis: Record<string, string> = {}
@@ -26,13 +27,7 @@ export default async function handler(req: any, res: any) {
 
     if (parts.length === 0) {
       // Serve README.md on the root page
-      let markdownContent = '';
-      try {
-        const { README_CONTENT } = await import('../src/readme.js');
-        markdownContent = README_CONTENT;
-      } catch (e) {
-        markdownContent = '# Apocalypse Radio Mirror\\nWelcome to the mirror.';
-      }
+      const markdownContent = README_CONTENT;
 
       const rawHtml = await marked.parse(markdownContent);
       const cleanHtml = sanitizeHtml(rawHtml, {
