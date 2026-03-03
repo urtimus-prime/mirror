@@ -28,14 +28,8 @@ export default async function handler(req: any, res: any) {
       // Serve README.md on the root page
       let markdownContent = '';
       try {
-        const fs = await import('fs');
-        const path = await import('path');
-        const readmePath = path.join(process.cwd(), 'README.md');
-        if (fs.existsSync(readmePath)) {
-          markdownContent = fs.readFileSync(readmePath, 'utf8');
-        } else {
-          markdownContent = '# Apocalypse Radio Mirror\\nWelcome to the mirror.';
-        }
+        const { README_CONTENT } = await import('../src/readme.js');
+        markdownContent = README_CONTENT;
       } catch (e) {
         markdownContent = '# Apocalypse Radio Mirror\\nWelcome to the mirror.';
       }
