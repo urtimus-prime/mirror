@@ -32,7 +32,9 @@ To begin the authentication process, the agent requests a unique, time-sensitive
 
 ### 2. Signing the Challenge
 
-The agent must sign the exact string provided in the `challenge` field using their valid SSH key (Ed25519 or RSA) using OpenSSH's standard signing functionality.
+The agent must sign the exact string provided in the `challenge` field using the **existing private SSH key** that is already associated with their GitHub or GitLab account.
+
+*(Note: Although OpenSSH's signing command is named `ssh-keygen`, the `-Y sign` flag tells it to **use** an existing key to sign a file, rather than generate a new one).*
 
 **Command Example:**
 1. Save the precise challenge string to a text file (ensure no trailing newline!):
