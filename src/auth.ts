@@ -6,32 +6,43 @@ import path from 'node:path';
 import { execSync } from 'node:child_process';
 const SECRET_KEY = process.env.CHALLENGE_SECRET || crypto.randomBytes(32).toString('hex');
 
-export function generateChallenge(provider: string, username: string): string {
+export function generateChallenge(provider: string, username: string, wakewords?: string): string {
     const timestamp = Date.now().toString();
-    const payload = `${provider}:${username}:${timestamp}`;
+    const safeWakewords = wakewords ? encodeURIComponent(wakewords) : '';
+    const payload = wakewords ? `${provider}:${username}:${timestamp}:${safeWakewords}` : `${provider}:${username}:${timestamp}`;
     const hmac = crypto.createHmac('sha256', SECRET_KEY).update(payload).digest('hex');
     return `${payload}:${hmac}`;
 }
 
-export function verifyChallenge(challenge: string, provider: string, username: string, maxAgeMs = 5 * 60 * 1000): boolean {
+export function verifyChallenge(challenge: string, provider: string, username: string, maxAgeMs = 5 * 60 * 1000): { valid: boolean, wakewords?: string } {
     const parts = challenge.split(':');
-    if (parts.length !== 4) return false;
+    if (parts.length !== 4 && parts.length !== 5) return { valid: false };
 
-    const [cProvider, cUsername, cTimestamp, cHmac] = parts;
-    if (cProvider !== provider || cUsername !== username) return false;
+    let cProvider, cUsername, cTimestamp, cWakewords, cHmac;
+    if (parts.length === 4) {
+        [cProvider, cUsername, cTimestamp, cHmac] = parts;
+    } else {
+        [cProvider, cUsername, cTimestamp, cWakewords, cHmac] = parts;
+    }
+
+    if (cProvider !== provider || cUsername !== username) return { valid: false };
 
     const timestamp = parseInt(cTimestamp, 10);
-    if (isNaN(timestamp) || Date.now() - timestamp > maxAgeMs) return false;
+    if (isNaN(timestamp) || Date.now() - timestamp > maxAgeMs) return { valid: false };
 
-    const payload = `${cProvider}:${cUsername}:${cTimestamp}`;
+    const payload = parts.length === 4 ? `${cProvider}:${cUsername}:${cTimestamp}` : `${cProvider}:${cUsername}:${cTimestamp}:${cWakewords}`;
     const expectedHmac = crypto.createHmac('sha256', SECRET_KEY).update(payload).digest('hex');
 
     const challengeHmacBuffer = Buffer.from(cHmac, 'hex');
     const expectedHmacBuffer = Buffer.from(expectedHmac, 'hex');
 
-    if (challengeHmacBuffer.length !== expectedHmacBuffer.length) return false;
+    if (challengeHmacBuffer.length !== expectedHmacBuffer.length) return { valid: false };
 
-    return crypto.timingSafeEqual(challengeHmacBuffer, expectedHmacBuffer);
+    const valid = crypto.timingSafeEqual(challengeHmacBuffer, expectedHmacBuffer);
+    return {
+        valid,
+        wakewords: (valid && cWakewords) ? decodeURIComponent(cWakewords) : undefined
+    };
 }
 
 export function verifySignature(challenge: string, signatureRawText: string, publicKey: string): boolean {
