@@ -250,8 +250,7 @@ export default async function handler(req: any, res: any) {
       }
 
       const { generateChallenge } = await import('../src/auth.js');
-      const normalizedProvider = qProvider === 'github' ? 'github.com' : qProvider;
-      const challenge = generateChallenge(normalizedProvider, qUsername, qWakewords);
+      const challenge = generateChallenge(qProvider, qUsername, qWakewords);
       return res.status(200).json({ challenge });
     }
 
@@ -268,21 +267,20 @@ export default async function handler(req: any, res: any) {
         return res.status(400).json({ error: 'Missing required fields' });
       }
 
-      const normalizedProvider = bodyProvider === 'github' ? 'github.com' : bodyProvider;
       const { verifyChallenge, verifySignature } = await import('../src/auth.js');
       const { markVerified } = await import('../src/store.js');
 
-      const verification = verifyChallenge(challenge, normalizedProvider, bodyUsername);
+      const verification = verifyChallenge(challenge, bodyProvider, bodyUsername);
 
       if (!verification.valid) {
         return res.status(400).json({ error: 'Invalid or expired challenge' });
       }
 
       let keysUrl = '';
-      if (normalizedProvider === 'github.com') {
+      if (bodyProvider === 'github.com') {
         keysUrl = `https://github.com/${bodyUsername}.keys`;
       } else {
-        keysUrl = `https://${normalizedProvider}/${bodyUsername}.keys`;
+        keysUrl = `https://${bodyProvider}/${bodyUsername}.keys`;
       }
 
       const keysRes = await fetch(keysUrl);
@@ -309,7 +307,7 @@ export default async function handler(req: any, res: any) {
         return res.status(401).json({ error: 'Signature verification failed' });
       }
 
-      await markVerified(normalizedProvider, bodyUsername, verification.wakewords);
+      await markVerified(bodyProvider, bodyUsername, verification.wakewords);
       return res.status(200).json({ success: true, message: 'Identity verified' });
     }
 
@@ -399,8 +397,7 @@ export default async function handler(req: any, res: any) {
     }
 
     const { getVerificationData } = await import('../src/store.js');
-    const normalizedProviderRaw = provider === 'github' ? 'github.com' : provider;
-    const verifiedData = await getVerificationData(normalizedProviderRaw, username);
+    const verifiedData = await getVerificationData(provider, username);
 
     let authSectionHtml = '';
     let nameHtml = username;

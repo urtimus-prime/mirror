@@ -34,9 +34,7 @@ app.get('/api/auth/challenge', (c) => {
         return c.json({ error: 'provider and username are required' }, 400)
     }
 
-    // Support github.com and gitlab.com/etc (normalize 'github' to 'github.com' if needed)
-    const normalizedProvider = provider === 'github' ? 'github.com' : provider
-    const challenge = generateChallenge(normalizedProvider, username)
+    const challenge = generateChallenge(provider, username)
     return c.json({ challenge })
 })
 
@@ -49,19 +47,17 @@ app.post('/api/auth/verify', async (c) => {
             return c.json({ error: 'Missing required fields' }, 400)
         }
 
-        const normalizedProvider = provider === 'github' ? 'github.com' : provider
-
-        if (!verifyChallenge(challenge, normalizedProvider, username)) {
+        if (!verifyChallenge(challenge, provider, username)) {
             return c.json({ error: 'Invalid or expired challenge' }, 400)
         }
 
         // Fetch keys from provider
         let keysUrl = ''
-        if (normalizedProvider === 'github.com') {
+        if (provider === 'github.com') {
             keysUrl = `https://github.com/${username}.keys`
         } else {
             // GitLab uses standard .keys suffix on users
-            keysUrl = `https://${normalizedProvider}/${username}.keys`
+            keysUrl = `https://${provider}/${username}.keys`
         }
 
         const keysRes = await fetch(keysUrl)
@@ -88,7 +84,7 @@ app.post('/api/auth/verify', async (c) => {
             return c.json({ error: 'Signature verification failed' }, 401)
         }
 
-        await markVerified(normalizedProvider, username)
+        await markVerified(provider, username)
 
         return c.json({ success: true, message: 'Identity verified' })
     } catch (err) {
@@ -101,14 +97,14 @@ app.get('/soul/:provider/:username', async (c) => {
     const provider = c.req.param('provider')
     const username = c.req.param('username')
 
-    if (provider !== 'github' && provider !== 'gitlab') {
+    if (provider !== 'github.com' && provider !== 'gitlab.com') {
         return c.notFound()
     }
 
     let markdownContent = ''
 
     try {
-        if (provider === 'github') {
+        if (provider === 'github.com') {
             let res = await fetch(`https://raw.githubusercontent.com/${username}/${username}/main/README.md`)
             if (!res.ok) {
                 res = await fetch(`https://raw.githubusercontent.com/${username}/${username}/master/README.md`)
@@ -118,7 +114,7 @@ app.get('/soul/:provider/:username', async (c) => {
             } else {
                 return c.text('Profile not found', 404)
             }
-        } else if (provider === 'gitlab') {
+        } else if (provider === 'gitlab.com') {
             let res = await fetch(`https://gitlab.com/${username}/${username}/-/raw/main/README.md`)
             if (!res.ok) {
                 res = await fetch(`https://gitlab.com/${username}/${username}/-/raw/master/README.md`)
@@ -135,7 +131,7 @@ app.get('/soul/:provider/:username', async (c) => {
     }
 
     // Rewrite relative image/link URLs to point to raw GitHub/GitLab content
-    const baseRawUrl = provider === 'github'
+    const baseRawUrl = provider === 'github.com'
         ? `https://raw.githubusercontent.com/${username}/${username}/main/`
         : `https://gitlab.com/${username}/${username}/-/raw/main/`
 
@@ -158,7 +154,7 @@ app.get('/soul/:provider/:username', async (c) => {
     })
 
     const ProviderAvatar = () => {
-        if (provider === 'github') {
+        if (provider === 'github.com') {
             return (
                 <img
                     src={`https://github.com/${username}.png`}
@@ -175,8 +171,7 @@ app.get('/soul/:provider/:username', async (c) => {
         }
     }
 
-    const normalizedProvider = provider === 'github' ? 'github.com' : provider;
-    const verifiedData = await getVerificationData(normalizedProvider, username);
+    const verifiedData = await getVerificationData(provider, username);
 
     return c.html(
         <Layout title={`${username} on Apocalypse Radio`}>
@@ -196,7 +191,7 @@ app.get('/soul/:provider/:username', async (c) => {
                             )}
                         </h1>
                         <p class="text-zinc-400 capitalize flex items-center gap-2 mt-1">
-                            <span class={`w-2 h-2 rounded-full ${provider === 'github' ? 'bg-purple-500' : 'bg-orange-500'} animate-pulse`}></span>
+                            <span class={`w-2 h-2 rounded-full ${provider === 'github.com' ? 'bg-purple-500' : 'bg-orange-500'} animate-pulse`}></span>
                             {provider} Soul Entity
                         </p>
                     </div>
