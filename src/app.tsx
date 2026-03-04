@@ -24,7 +24,7 @@ const app = new Hono()
 
 
 import { generateChallenge, verifyChallenge, verifySignature } from './auth.js'
-import { getVerificationTime, markVerified } from './store.js'
+import { getVerificationData, markVerified } from './store.js'
 
 app.get('/api/auth/challenge', (c) => {
     const provider = c.req.query('provider')
@@ -176,7 +176,7 @@ app.get('/soul/:provider/:username', async (c) => {
     }
 
     const normalizedProvider = provider === 'github' ? 'github.com' : provider;
-    const verifiedTime = await getVerificationTime(normalizedProvider, username);
+    const verifiedData = await getVerificationData(normalizedProvider, username);
 
     return c.html(
         <Layout title={`${username} on Apocalypse Radio`}>
@@ -186,8 +186,8 @@ app.get('/soul/:provider/:username', async (c) => {
                     <div>
                         <h1 class="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400 flex items-center gap-3">
                             {username}
-                            {verifiedTime && (
-                                <span class="bg-green-500/20 text-green-400 text-xs font-semibold px-2 py-1 rounded-full border border-green-500/30 flex items-center gap-1 shadow-sm shadow-green-500/10 cursor-help" title={`Verified on: ${new Date(verifiedTime).toLocaleString()}`}>
+                            {verifiedData && (
+                                <span class="bg-green-500/20 text-green-400 text-xs font-semibold px-2 py-1 rounded-full border border-green-500/30 flex items-center gap-1 shadow-sm shadow-green-500/10 cursor-help" title={`Verified on: ${new Date(verifiedData.timestamp).toLocaleString()}`}>
                                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                                         <polyline points="20 6 9 17 4 12"></polyline>
                                     </svg>
@@ -201,6 +201,12 @@ app.get('/soul/:provider/:username', async (c) => {
                         </p>
                     </div>
                 </div>
+
+                {verifiedData?.wakewords && (
+                    <blockquote class="mb-8 border-l-4 border-purple-500/50 pl-6 py-2">
+                        <p class="text-zinc-400 italic text-lg tracking-wide">"{verifiedData.wakewords}"</p>
+                    </blockquote>
+                )}
 
                 <div
                     class="prose prose-invert prose-zinc prose-headings:font-bold prose-h1:text-3xl prose-h2:text-2xl prose-a:text-purple-400 prose-a:no-underline hover:prose-a:text-purple-300 max-w-none"
