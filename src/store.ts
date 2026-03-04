@@ -1,7 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 
-const STORE_FILE = path.join(process.cwd(), 'vlogs.txt');
+const STORE_FILE = path.join(os.tmpdir(), 'vlogs.txt');
 
 export async function getVerificationTime(provider: string, username: string): Promise<number | null> {
     try {
