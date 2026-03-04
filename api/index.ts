@@ -231,6 +231,193 @@ export default async function handler(req: any, res: any) {
       return res.status(200).send(html);
     }
 
+    // Skill Tree Route: /soul/:provider/:username/skills
+    if (parts.length === 4 && parts[0] === 'soul' && parts[3] === 'skills') {
+      const provider = parts[1]
+      const username = parts[2]
+
+      if (!provider.includes('.')) {
+        return res.status(404).send('Invalid Provider Hostname')
+      }
+
+      const { fetchSkillTree } = await import('../src/skills.js')
+      const skillData = await fetchSkillTree(provider, username)
+
+      if (!skillData || skillData.nodes.length === 0) {
+        return res.status(404).send('No skill tree found for this user')
+      }
+
+      const isGithub = provider === 'github.com'
+      let avatarUrl = isGithub
+        ? `https://github.com/${username}.png`
+        : `https://ui-avatars.com/api/?name=${username}&background=random&color=fff`
+
+      if (!isGithub) {
+        try {
+          const profileRes = await fetch(`https://${provider}/${username}`)
+          if (profileRes.ok) {
+            const htmlText = await profileRes.text()
+            const match = htmlText.match(/<meta[^>]*property="og:image"[^>]*content="([^"]+)"/i) ||
+              htmlText.match(/<meta[^>]*content="([^"]+)"[^>]*property="og:image"/i)
+            if (match && match[1]) avatarUrl = match[1]
+          }
+        } catch {}
+      }
+
+      const skillTreeHtml = `<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${username} - Skill Tree | Apocalypse Radio</title>
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <script>tailwind.config = { darkMode: 'class', theme: { extend: {} } }</script>
+  <style>
+    body { background-color: black; color: white; min-height: 100vh; margin: 0; overflow: hidden; }
+    .prose {
+      --tw-prose-body: #d4d4d8; --tw-prose-headings: #fff;
+      --tw-prose-links: #c084fc; --tw-prose-bold: #fff;
+      --tw-prose-counters: #a1a1aa; --tw-prose-bullets: #52525b;
+      --tw-prose-hr: #3f3f46; --tw-prose-quotes: #f4f4f5;
+      --tw-prose-quote-borders: #3f3f46; --tw-prose-captions: #a1a1aa;
+      --tw-prose-code: #fff; --tw-prose-pre-code: #e4e4e7;
+      --tw-prose-pre-bg: #18181b; --tw-prose-th-borders: #52525b;
+      --tw-prose-td-borders: #3f3f46;
+    }
+    .prose a:hover { color: #d8b4fe; }
+    #skill-canvas { display: block; }
+    #side-panel {
+      position: fixed; top: 0; right: -420px; width: 400px; height: 100vh;
+      background: rgba(0,0,0,0.95); border-left: 1px solid #333;
+      transition: right 0.3s ease; z-index: 50; overflow-y: auto;
+      backdrop-filter: blur(12px);
+    }
+    #side-panel.open { right: 0; }
+    #canvas-area {
+      transition: margin-right 0.3s ease;
+    }
+    #canvas-area.shifted { margin-right: 400px; }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="fixed top-0 left-0 right-0 z-40 bg-black/80 backdrop-blur-sm border-b border-zinc-800/50">
+    <div class="flex items-center gap-4 px-6 py-3">
+      <a href="/soul/${provider}/${username}" class="text-zinc-400 hover:text-white text-sm flex items-center gap-2 transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        Back to profile
+      </a>
+      <div class="w-px h-6 bg-zinc-800"></div>
+      <img src="${avatarUrl}" alt="${username}" class="w-8 h-8 rounded-full border border-zinc-700" />
+      <span class="text-white font-semibold">${username}</span>
+      <span class="text-zinc-500 text-sm">Skill Tree</span>
+    </div>
+  </div>
+
+  <!-- Canvas area -->
+  <div id="canvas-area" class="pt-14" style="height: 100vh; overflow: auto;">
+    <canvas id="skill-canvas"></canvas>
+  </div>
+
+  <!-- Side panel -->
+  <div id="side-panel">
+    <div class="p-6">
+      <div class="flex items-center justify-between mb-6">
+        <h2 id="panel-title" class="text-xl font-bold text-white flex items-center gap-2"></h2>
+        <button id="panel-close" class="text-zinc-500 hover:text-white transition-colors p-1">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div id="panel-level" class="text-sm text-zinc-400 mb-4"></div>
+      <div id="panel-state" class="mb-4"></div>
+      <div id="panel-content" class="prose prose-invert prose-zinc prose-sm max-w-none mb-6"></div>
+      <div id="panel-files" class="border-t border-zinc-800 pt-4 mt-4"></div>
+    </div>
+  </div>
+
+  <script>window.__SKILL_DATA__ = ${JSON.stringify(skillData)};</script>
+  <script src="/skill-tree.js"></script>
+  <script>
+    (function() {
+      var data = window.__SKILL_DATA__;
+      var canvas = document.getElementById('skill-canvas');
+      var panel = document.getElementById('side-panel');
+      var canvasArea = document.getElementById('canvas-area');
+      var panelTitle = document.getElementById('panel-title');
+      var panelLevel = document.getElementById('panel-level');
+      var panelState = document.getElementById('panel-state');
+      var panelContent = document.getElementById('panel-content');
+      var panelFiles = document.getElementById('panel-files');
+      var panelClose = document.getElementById('panel-close');
+      var provider = data.provider;
+      var username = data.username;
+
+      function getStateLabel(state) {
+        switch(state) {
+          case 'maxed': return '<span class="bg-yellow-500/20 text-yellow-400 text-xs font-semibold px-2 py-1 rounded-full border border-yellow-500/30">Maxed</span>';
+          case 'unlocked': return '<span class="bg-blue-500/20 text-blue-400 text-xs font-semibold px-2 py-1 rounded-full border border-blue-500/30">Unlocked</span>';
+          case 'available': return '<span class="bg-cyan-500/20 text-cyan-400 text-xs font-semibold px-2 py-1 rounded-full border border-cyan-500/30">Available</span>';
+          default: return '<span class="bg-zinc-500/20 text-zinc-400 text-xs font-semibold px-2 py-1 rounded-full border border-zinc-500/30">Locked</span>';
+        }
+      }
+
+      function getRawFileUrl(filePath) {
+        if (provider === 'github.com') {
+          return 'https://github.com/' + username + '/' + username + '/blob/main/' + filePath;
+        }
+        return 'https://' + provider + '/' + username + '/' + username + '/-/blob/main/' + filePath;
+      }
+
+      function showPanel(node) {
+        panelTitle.innerHTML = (node.iconEmoji ? node.iconEmoji + ' ' : '') + node.skillName;
+        panelLevel.textContent = node.maxLevel > 1
+          ? 'Level ' + node.currentLevel + ' / ' + node.maxLevel
+          : '';
+        panelState.innerHTML = getStateLabel(node.skillState);
+        panelContent.innerHTML = node.skillContent || '<p class="text-zinc-500 italic">No detailed description available.</p>';
+
+        if (node.relatedFiles && node.relatedFiles.length > 0) {
+          var filesHtml = '<h4 class="text-sm font-semibold text-zinc-400 mb-2">Related Files</h4><ul class="space-y-1">';
+          for (var i = 0; i < node.relatedFiles.length; i++) {
+            var file = node.relatedFiles[i];
+            var fullPath = node.id + '/' + file;
+            filesHtml += '<li><a href="' + getRawFileUrl(fullPath) + '" target="_blank" rel="noopener" class="text-purple-400 hover:text-purple-300 text-sm flex items-center gap-1">';
+            filesHtml += '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
+            filesHtml += file + '</a></li>';
+          }
+          filesHtml += '</ul>';
+          panelFiles.innerHTML = filesHtml;
+          panelFiles.style.display = 'block';
+        } else {
+          panelFiles.style.display = 'none';
+        }
+
+        panel.classList.add('open');
+        canvasArea.classList.add('shifted');
+      }
+
+      function closePanel() {
+        panel.classList.remove('open');
+        canvasArea.classList.remove('shifted');
+      }
+
+      panelClose.addEventListener('click', closePanel);
+
+      var tree = window.SkillTree.init(canvas, data, {
+        onNodeClick: function(node) {
+          showPanel(node);
+        }
+      });
+    })();
+  </script>
+</body>
+</html>`;
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.setHeader('Cache-Control', 's-maxage=10, stale-while-revalidate')
+      return res.status(200).send(skillTreeHtml)
+    }
+
     if (parts.length < 3) {
       return res.status(404).send('Not Found')
     }
@@ -397,7 +584,18 @@ export default async function handler(req: any, res: any) {
     }
 
     const { getVerificationData } = await import('../src/store.js');
-    const verifiedData = await getVerificationData(provider, username);
+    const { hasSkillTree } = await import('../src/skills.js');
+    const [verifiedData, hasSkills] = await Promise.all([
+      getVerificationData(provider, username),
+      hasSkillTree(provider, username),
+    ]);
+
+    const skillTreeLink = hasSkills
+      ? `<a href="/soul/${provider}/${username}/skills" class="inline-flex items-center gap-1.5 text-sm text-purple-400 hover:text-purple-300 transition-colors mt-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+          View Skill Tree
+        </a>`
+      : '';
 
     let authSectionHtml = '';
     let nameHtml = username;
@@ -540,6 +738,7 @@ export default async function handler(req: any, res: any) {
             ${provider === 'github.com' ? 'GitHub' : provider} Soul Entity
           </p>
           ${authSectionHtml}
+          ${skillTreeLink}
         </div>
       </div>
       <div class="prose prose-invert prose-zinc prose-headings:font-bold prose-h1:text-3xl prose-h2:text-2xl prose-a:text-purple-400 prose-a:no-underline hover:prose-a:text-purple-300 max-w-none">
