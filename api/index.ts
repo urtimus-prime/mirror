@@ -50,18 +50,39 @@ export default async function handler(req: any, res: any) {
         }
       });
 
-      // We'll statically render the cards, then use client-side JS to filter them
-      const cardsHtml = recentSouls.map(soul => {
+      // Asynchronously fetch avatars for non-github providers to ensure rich profile pictures on the homepage
+      const cardsHtmlArray = await Promise.all(recentSouls.map(async soul => {
         const isGithub = soul.provider === 'github.com';
         const dotColor = isGithub ? 'bg-purple-500' : 'bg-orange-500';
         const providerName = isGithub ? 'GitHub' : soul.provider;
-        const avatarUrl = isGithub
+
+        let avatarUrl = isGithub
           ? `https://github.com/${soul.username}.png`
-          : `https://ui-avatars.com/api/?name=${soul.username}&background=random&color=fff`;
+          : '';
+
+        if (!isGithub) {
+          try {
+            const profileRes = await fetch(`https://${soul.provider}/${soul.username}`);
+            if (profileRes.ok) {
+              const htmlText = await profileRes.text();
+              const match = htmlText.match(/<meta[^>]*property="og:image"[^>]*content="([^"]+)"/i) ||
+                htmlText.match(/<meta[^>]*content="([^"]+)"[^>]*property="og:image"/i);
+              if (match && match[1]) {
+                avatarUrl = match[1];
+              }
+            }
+          } catch (err) {
+            console.error(`Failed to parse custom avatar for ${soul.username} on ${soul.provider}`, err);
+          }
+
+          if (!avatarUrl) {
+            avatarUrl = `https://ui-avatars.com/api/?name=${soul.username}&background=random&color=fff`;
+          }
+        }
 
         return `
         <a href="/soul/${soul.provider}/${soul.username}" class="soul-card flex items-start gap-4 p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/80 transition-all hover:border-zinc-600 hover:shadow-lg hover:shadow-purple-900/20 group" data-username="${soul.username.toLowerCase()}" data-provider="${soul.provider.toLowerCase()}">
-          <img src="${avatarUrl}" alt="${soul.username}" class="w-14 h-14 rounded-full border border-zinc-700 group-hover:border-${isGithub ? 'purple' : 'orange'}-500/50 transition-colors mt-1" loading="lazy" />
+          <img src="${avatarUrl}" alt="${soul.username}" class="w-14 h-14 object-cover rounded-full border border-zinc-700 group-hover:border-${isGithub ? 'purple' : 'orange'}-500/50 transition-colors mt-1" loading="lazy" />
           <div class="flex-1 min-w-0">
             <div class="flex items-center justify-between">
               <h3 class="text-white font-bold truncate text-lg group-hover:text-purple-300 transition-colors">${soul.username}</h3>
@@ -78,7 +99,9 @@ export default async function handler(req: any, res: any) {
           </div>
         </a>
         `;
-      }).join('');
+      }));
+
+      const cardsHtml = cardsHtmlArray.join('');
 
       const html = `<!DOCTYPE html>
 <html lang="en" class="dark">
