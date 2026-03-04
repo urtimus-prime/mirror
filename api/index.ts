@@ -26,53 +26,141 @@ export default async function handler(req: any, res: any) {
     console.log('Extracted Parts:', parts)
 
     if (parts.length === 0) {
-      // Serve README.md on the root page
-      const markdownContent = README_CONTENT;
+      const { getRecentVerifications } = await import('../src/store.js');
+      const recentSouls = await getRecentVerifications(100);
 
-      const rawHtml = await marked.parse(markdownContent);
-      const cleanHtml = sanitizeHtml(rawHtml, {
-        allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'a', 'ul', 'ol', 'li', 'b', 'i', 'strong', 'em', 'strike', 'code', 'hr', 'br', 'div', 'table', 'thead', 'caption', 'tbody', 'tr', 'th', 'td', 'pre']),
-        allowedAttributes: {
-          ...sanitizeHtml.defaults.allowedAttributes,
-          '*': ['class', 'id'],
-          'a': ['href', 'name', 'target', 'rel'],
-          'img': ['src', 'alt']
-        }
-      });
+      // We'll statically render the cards, then use client-side JS to filter them
+      const cardsHtml = recentSouls.map(soul => {
+        const isGithub = soul.provider === 'github.com';
+        const dotColor = isGithub ? 'bg-purple-500' : 'bg-orange-500';
+        const providerName = isGithub ? 'GitHub' : soul.provider;
+        const avatarUrl = isGithub
+          ? `https://github.com/${soul.username}.png`
+          : `https://ui-avatars.com/api/?name=${soul.username}&background=random&color=fff`;
+
+        return `
+        <a href="/soul/${soul.provider}/${soul.username}" class="soul-card flex items-center gap-4 p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/80 transition-all hover:border-zinc-600 hover:shadow-lg hover:shadow-purple-900/20 group" data-username="${soul.username.toLowerCase()}" data-provider="${soul.provider.toLowerCase()}">
+          <img src="${avatarUrl}" alt="${soul.username}" class="w-14 h-14 rounded-full border border-zinc-700 group-hover:border-${isGithub ? 'purple' : 'orange'}-500/50 transition-colors" loading="lazy" />
+          <div class="flex-1 min-w-0">
+            <h3 class="text-white font-bold truncate text-lg group-hover:text-purple-300 transition-colors">${soul.username}</h3>
+            <div class="flex items-center justify-between mt-1">
+              <p class="text-xs text-zinc-400 flex items-center gap-1.5 truncate">
+                <span class="w-1.5 h-1.5 rounded-full ${dotColor}"></span>
+                ${providerName}
+              </p>
+              <p class="text-[10px] items-center gap-1 text-zinc-500 whitespace-nowrap hidden sm:flex">
+                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                ${new Date(soul.timestamp).toLocaleDateString()}
+              </p>
+            </div>
+          </div>
+        </a>
+        `;
+      }).join('');
 
       const html = `<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Apocalypse Radio Mirror</title>
-  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <title>Mirror | Apocalypse Radio</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = { darkMode: 'class', theme: { extend: {} } }
   </script>
   <style>
     body { background-color: black; color: white; min-height: 100vh; }
-    .prose {
-      --tw-prose-body: #d4d4d8; --tw-prose-headings: #fff;
-      --tw-prose-links: #c084fc; --tw-prose-bold: #fff;
-      --tw-prose-counters: #a1a1aa; --tw-prose-bullets: #52525b;
-      --tw-prose-hr: #3f3f46; --tw-prose-quotes: #f4f4f5;
-      --tw-prose-quote-borders: #3f3f46; --tw-prose-captions: #a1a1aa;
-      --tw-prose-code: #fff; --tw-prose-pre-code: #e4e4e7;
-      --tw-prose-pre-bg: #18181b; --tw-prose-th-borders: #52525b;
-      --tw-prose-td-borders: #3f3f46;
-    }
-    .prose a:hover { color: #d8b4fe; }
   </style>
 </head>
-<body>
-  <main class="max-w-6xl mx-auto px-4 py-8 pb-24">
-    <div class="max-w-4xl mx-auto py-12 px-8 shadow-xl shadow-purple-900/10 rounded-2xl border border-zinc-800/50 bg-black/40 backdrop-blur-md">
-      <div class="prose prose-invert prose-zinc prose-headings:font-bold prose-h1:text-4xl prose-h2:text-2xl prose-a:text-purple-400 prose-a:no-underline hover:prose-a:text-purple-300 max-w-none">
-        ${cleanHtml}
+<body class="bg-black text-white antialiased selection:bg-purple-900 selection:text-white">
+  
+  <div class="fixed inset-0 z-[-1] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900 via-black to-black opacity-80"></div>
+
+  <main class="max-w-6xl mx-auto px-4 py-12 pb-24">
+    <div class="text-center max-w-2xl mx-auto mb-16">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-xs font-medium text-zinc-400 mb-6 shadow-sm">
+        <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+        Systems Online
+      </div>
+      <h1 class="text-5xl md:text-6xl font-bold mb-6 tracking-tight bg-clip-text text-transparent bg-gradient-to-br from-white via-zinc-200 to-zinc-500">
+        Apocalypse Mirror
+      </h1>
+      <p class="text-lg text-zinc-400 leading-relaxed font-light">
+        A decentralized directory of cryptographically verified souls. Establish your presence by mirroring your digital identity.
+      </p>
+    </div>
+
+    <div class="max-w-5xl mx-auto">
+      <!-- Controls -->
+      <div class="flex flex-col sm:flex-row gap-4 mb-8 bg-zinc-900/40 p-2 rounded-2xl border border-zinc-800/50 backdrop-blur-sm">
+        <div class="relative flex-1">
+          <svg class="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input 
+            type="text" 
+            id="searchInput" 
+            placeholder="Search verified souls..." 
+            class="w-full bg-transparent text-white pl-11 pr-4 py-3 rounded-xl border-none outline-none focus:ring-2 focus:ring-purple-500 transition-shadow placeholder:text-zinc-600"
+          />
+        </div>
+        <div class="w-px bg-zinc-800 hidden sm:block"></div>
+        <select id="providerFilter" class="bg-transparent text-white px-4 py-3 sm:w-48 appearance-none border-none outline-none focus:ring-2 focus:ring-purple-500 transition-shadow rounded-xl cursor-pointer">
+          <option value="all" class="bg-zinc-900">All Providers</option>
+          <option value="github.com" class="bg-zinc-900">GitHub</option>
+          <option value="gitlab.com" class="bg-zinc-900">GitLab</option>
+        </select>
+      </div>
+
+      <!-- Grid -->
+      <div id="soulsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        ${cardsHtml || '<div class="col-span-full py-12 text-center text-zinc-500 border border-dashed border-zinc-800 rounded-2xl">No verified souls found yet.</div>'}
+      </div>
+      
+      <div id="emptyState" class="hidden py-16 text-center text-zinc-500 border border-dashed border-zinc-800 rounded-2xl mt-4">
+        No souls matching your filters.
       </div>
     </div>
   </main>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const searchInput = document.getElementById('searchInput');
+      const providerFilter = document.getElementById('providerFilter');
+      const cards = document.querySelectorAll('.soul-card');
+      const emptyState = document.getElementById('emptyState');
+
+      function filterCards() {
+        const query = searchInput.value.toLowerCase();
+        const provider = providerFilter.value;
+        let visibleCount = 0;
+
+        cards.forEach(card => {
+          const cardUsername = card.getAttribute('data-username');
+          const cardProvider = card.getAttribute('data-provider');
+          
+          const matchesQuery = cardUsername.includes(query);
+          const matchesProvider = provider === 'all' || cardProvider === provider;
+
+          if (matchesQuery && matchesProvider) {
+            card.style.display = 'flex';
+            visibleCount++;
+          } else {
+            card.style.display = 'none';
+          }
+        });
+
+        if (visibleCount === 0 && cards.length > 0) {
+          emptyState.classList.remove('hidden');
+        } else {
+          emptyState.classList.add('hidden');
+        }
+      }
+
+      searchInput.addEventListener('input', filterCards);
+      providerFilter.addEventListener('change', filterCards);
+    });
+  </script>
 </body>
 </html>`;
 
