@@ -36,7 +36,7 @@ export function verifyChallenge(challenge: string, provider: string, username: s
 
 export function verifySignature(challenge: string, signatureRawText: string, publicKey: string): boolean {
     try {
-        const lines = signatureRawText.split('\\n').map(l => l.trim()).filter(l => l && !l.startsWith('-----'));
+        const lines = signatureRawText.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('-----'));
         const sigBuffer = Buffer.from(lines.join(''), 'base64');
 
         let offset = 0;
@@ -49,11 +49,17 @@ export function verifySignature(challenge: string, signatureRawText: string, pub
         }
 
         const magic = sigBuffer.subarray(offset, offset + 6).toString('utf8');
-        if (magic !== 'SSHSIG') return false;
+        if (magic !== 'SSHSIG') {
+            console.log("[VERIFY_DEBUG] FAILED MAGIC:", magic);
+            return false;
+        }
         offset += 6;
 
         const version = sigBuffer.readUInt32BE(offset);
-        if (version !== 1) return false;
+        if (version !== 1) {
+            console.log("[VERIFY_DEBUG] FAILED VERSION:", version);
+            return false;
+        }
         offset += 4;
 
         readString(); // pubKey
