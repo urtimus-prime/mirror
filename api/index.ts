@@ -3,7 +3,8 @@ import { gfmHeadingId } from 'marked-gfm-heading-id'
 import { markedEmoji } from 'marked-emoji'
 import { gemoji } from 'gemoji'
 import sanitizeHtml from 'sanitize-html'
-import { README_CONTENT } from '../src/readme.js'
+import fs from 'node:fs'
+import path from 'node:path'
 
 // Build unicode emoji map from gemoji: { "joy": "😂", "heart": "❤️", ... }
 const emojis: Record<string, string> = {}
@@ -30,7 +31,15 @@ export default async function handler(req: any, res: any) {
       const recentSouls = await getRecentVerifications(100);
 
       // Parse README content
-      const rawReadmeHtml = await marked.parse(README_CONTENT);
+      const readmePath = path.join(process.cwd(), 'README.md');
+      let rawReadmeText = '';
+      try {
+        rawReadmeText = fs.readFileSync(readmePath, 'utf8');
+      } catch (err) {
+        console.error('Failed to read README.md:', err);
+        rawReadmeText = '# Welcome to Apocalypse Radio\n(README content could not be loaded)';
+      }
+      const rawReadmeHtml = await marked.parse(rawReadmeText);
       const cleanReadmeHtml = sanitizeHtml(rawReadmeHtml, {
         allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'a', 'ul', 'ol', 'li', 'b', 'i', 'strong', 'em', 'strike', 'code', 'hr', 'br', 'div', 'table', 'thead', 'caption', 'tbody', 'tr', 'th', 'td', 'pre']),
         allowedAttributes: {
