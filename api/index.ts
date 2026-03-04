@@ -51,20 +51,21 @@ export default async function handler(req: any, res: any) {
           : `https://ui-avatars.com/api/?name=${soul.username}&background=random&color=fff`;
 
         return `
-        <a href="/soul/${soul.provider}/${soul.username}" class="soul-card flex items-center gap-4 p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/80 transition-all hover:border-zinc-600 hover:shadow-lg hover:shadow-purple-900/20 group" data-username="${soul.username.toLowerCase()}" data-provider="${soul.provider.toLowerCase()}">
-          <img src="${avatarUrl}" alt="${soul.username}" class="w-14 h-14 rounded-full border border-zinc-700 group-hover:border-${isGithub ? 'purple' : 'orange'}-500/50 transition-colors" loading="lazy" />
+        <a href="/soul/${soul.provider}/${soul.username}" class="soul-card flex items-start gap-4 p-4 rounded-xl border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/80 transition-all hover:border-zinc-600 hover:shadow-lg hover:shadow-purple-900/20 group" data-username="${soul.username.toLowerCase()}" data-provider="${soul.provider.toLowerCase()}">
+          <img src="${avatarUrl}" alt="${soul.username}" class="w-14 h-14 rounded-full border border-zinc-700 group-hover:border-${isGithub ? 'purple' : 'orange'}-500/50 transition-colors mt-1" loading="lazy" />
           <div class="flex-1 min-w-0">
-            <h3 class="text-white font-bold truncate text-lg group-hover:text-purple-300 transition-colors">${soul.username}</h3>
-            <div class="flex items-center justify-between mt-1">
-              <p class="text-xs text-zinc-400 flex items-center gap-1.5 truncate">
-                <span class="w-1.5 h-1.5 rounded-full ${dotColor}"></span>
-                ${providerName}
-              </p>
-              <p class="text-[10px] items-center gap-1 text-zinc-500 whitespace-nowrap hidden sm:flex">
+            <div class="flex items-center justify-between">
+              <h3 class="text-white font-bold truncate text-lg group-hover:text-purple-300 transition-colors">${soul.username}</h3>
+              <p class="text-[10px] items-center gap-1 text-zinc-500 whitespace-nowrap hidden sm:flex shrink-0 ml-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                 ${new Date(soul.timestamp).toLocaleDateString()}
               </p>
             </div>
+            <p class="text-xs text-zinc-400 flex items-center gap-1.5 truncate mt-0.5 mb-2">
+              <span class="w-1.5 h-1.5 rounded-full ${dotColor}"></span>
+              ${providerName}
+            </p>
+            ${soul.wakewords ? `<p class="text-sm text-zinc-300 italic line-clamp-2 leading-relaxed border-l-2 border-purple-500/30 pl-3 py-0.5 mt-2 text-ellipsis">"${soul.wakewords}"</p>` : ''}
           </div>
         </a>
         `;
@@ -210,6 +211,7 @@ export default async function handler(req: any, res: any) {
       const urlObj = new URL(urlStr, `http://${req.headers.host || 'localhost'}`);
       const qProvider = urlObj.searchParams.get('provider');
       const qUsername = urlObj.searchParams.get('username');
+      const qWakewords = urlObj.searchParams.get('wakewords') || undefined;
 
       if (!qProvider || !qUsername) {
         return res.status(400).json({ error: 'provider and username are required' });
@@ -217,7 +219,7 @@ export default async function handler(req: any, res: any) {
 
       const { generateChallenge } = await import('../src/auth.js');
       const normalizedProvider = qProvider === 'github' ? 'github.com' : qProvider;
-      const challenge = generateChallenge(normalizedProvider, qUsername);
+      const challenge = generateChallenge(normalizedProvider, qUsername, qWakewords);
       return res.status(200).json({ challenge });
     }
 
@@ -238,7 +240,9 @@ export default async function handler(req: any, res: any) {
       const { verifyChallenge, verifySignature } = await import('../src/auth.js');
       const { markVerified } = await import('../src/store.js');
 
-      if (!verifyChallenge(challenge, normalizedProvider, bodyUsername)) {
+      const verification = verifyChallenge(challenge, normalizedProvider, bodyUsername);
+
+      if (!verification.valid) {
         return res.status(400).json({ error: 'Invalid or expired challenge' });
       }
 
@@ -273,7 +277,7 @@ export default async function handler(req: any, res: any) {
         return res.status(401).json({ error: 'Signature verification failed' });
       }
 
-      await markVerified(normalizedProvider, bodyUsername);
+      await markVerified(normalizedProvider, bodyUsername, verification.wakewords);
       return res.status(200).json({ success: true, message: 'Identity verified' });
     }
 
@@ -362,24 +366,32 @@ export default async function handler(req: any, res: any) {
       avatarHtml = `<img src="${profileImageUrl}" alt="${username}" class="w-20 h-20 rounded-full border-2 border-orange-500/50 shadow-lg shadow-orange-500/20 object-cover" />`
     }
 
-    const { getVerificationTime } = await import('../src/store.js');
+    const { getVerificationData } = await import('../src/store.js');
     const normalizedProviderRaw = provider === 'github' ? 'github.com' : provider;
-    const verifiedTime = await getVerificationTime(normalizedProviderRaw, username);
+    const verifiedData = await getVerificationData(normalizedProviderRaw, username);
 
     let authSectionHtml = '';
     let nameHtml = username;
 
-    if (verifiedTime) {
+    if (verifiedData) {
       nameHtml = `${username}
-      <span class="bg-green-500/20 text-green-400 text-xs font-semibold px-2 py-1 rounded-full border border-green-500/30 flex items-center gap-1 shadow-sm shadow-green-500/10 cursor-help ml-3" title="Verified on: ${new Date(verifiedTime).toLocaleString()}">
+      <span class="bg-green-500/20 text-green-400 text-xs font-semibold px-2 py-1 rounded-full border border-green-500/30 flex items-center gap-1 shadow-sm shadow-green-500/10 cursor-help ml-3" title="Verified on: ${new Date(verifiedData.timestamp).toLocaleString()}">
           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="20 6 9 17 4 12"></polyline>
           </svg>
           Soul Verified
       </span>`;
+
+      if (verifiedData.wakewords) {
+        authSectionHtml = `
+          <blockquote class="mt-4 border-l-4 border-purple-500/50 pl-4 py-1">
+            <p class="text-zinc-400 italic text-sm">"${verifiedData.wakewords}"</p>
+          </blockquote>`;
+      }
     } else {
       authSectionHtml = `
       <div class="mt-4">
+        <input id="wakewords" type="text" placeholder="Optional public broadcast msg... (max 100 char)" maxlength="100" class="w-full sm:w-80 bg-black border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-purple-500 transition-colors mb-4" />
         <button id="auth-btn" class="bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-semibold py-2 px-4 rounded-lg border border-zinc-700 transition-colors flex items-center gap-2">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
           Authenticate Soul via SSH
@@ -390,16 +402,22 @@ export default async function handler(req: any, res: any) {
         document.getElementById('auth-btn').addEventListener('click', async () => {
           const statusEl = document.getElementById('auth-status');
           const btn = document.getElementById('auth-btn');
+          const wakewordsVal = document.getElementById('wakewords').value.trim();
           
           btn.disabled = true;
           btn.style.opacity = '0.5';
+          document.getElementById('wakewords').disabled = true;
+          
           statusEl.classList.remove('hidden');
           statusEl.innerHTML = '<span class="animate-pulse">Fetching cryptographic challenge...</span>';
           
           try {
             const provider = '${provider}';
             const username = '${username}';
-            const res = await fetch(\`/api/auth/challenge?provider=\${provider}&username=\${username}\`);
+            let url = \`/api/auth/challenge?provider=\${provider}&username=\${username}\`;
+            if (wakewordsVal) url += \`&wakewords=\${encodeURIComponent(wakewordsVal)}\`;
+            
+            const res = await fetch(url);
             
             if (!res.ok) throw new Error('Challenge fetch failed');
             const data = await res.json();
