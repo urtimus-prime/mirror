@@ -29,6 +29,18 @@ export default async function handler(req: any, res: any) {
       const { getRecentVerifications } = await import('../src/store.js');
       const recentSouls = await getRecentVerifications(100);
 
+      // Parse README content
+      const rawReadmeHtml = await marked.parse(README_CONTENT);
+      const cleanReadmeHtml = sanitizeHtml(rawReadmeHtml, {
+        allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'a', 'ul', 'ol', 'li', 'b', 'i', 'strong', 'em', 'strike', 'code', 'hr', 'br', 'div', 'table', 'thead', 'caption', 'tbody', 'tr', 'th', 'td', 'pre']),
+        allowedAttributes: {
+          ...sanitizeHtml.defaults.allowedAttributes,
+          '*': ['class', 'id'],
+          'a': ['href', 'name', 'target', 'rel'],
+          'img': ['src', 'alt']
+        }
+      });
+
       // We'll statically render the cards, then use client-side JS to filter them
       const cardsHtml = recentSouls.map(soul => {
         const isGithub = soul.provider === 'github.com';
@@ -64,12 +76,23 @@ export default async function handler(req: any, res: any) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Mirror | Apocalypse Radio</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
   <script>
     tailwind.config = { darkMode: 'class', theme: { extend: {} } }
   </script>
   <style>
     body { background-color: black; color: white; min-height: 100vh; }
+    .prose {
+      --tw-prose-body: #d4d4d8; --tw-prose-headings: #fff;
+      --tw-prose-links: #c084fc; --tw-prose-bold: #fff;
+      --tw-prose-counters: #a1a1aa; --tw-prose-bullets: #52525b;
+      --tw-prose-hr: #3f3f46; --tw-prose-quotes: #f4f4f5;
+      --tw-prose-quote-borders: #3f3f46; --tw-prose-captions: #a1a1aa;
+      --tw-prose-code: #fff; --tw-prose-pre-code: #e4e4e7;
+      --tw-prose-pre-bg: #18181b; --tw-prose-th-borders: #52525b;
+      --tw-prose-td-borders: #3f3f46;
+    }
+    .prose a:hover { color: #d8b4fe; }
   </style>
 </head>
 <body class="bg-black text-white antialiased selection:bg-purple-900 selection:text-white">
@@ -90,7 +113,7 @@ export default async function handler(req: any, res: any) {
       </p>
     </div>
 
-    <div class="max-w-5xl mx-auto">
+    <div class="max-w-5xl mx-auto mb-16">
       <!-- Controls -->
       <div class="flex flex-col sm:flex-row gap-4 mb-8 bg-zinc-900/40 p-2 rounded-2xl border border-zinc-800/50 backdrop-blur-sm">
         <div class="relative flex-1">
@@ -119,6 +142,12 @@ export default async function handler(req: any, res: any) {
       
       <div id="emptyState" class="hidden py-16 text-center text-zinc-500 border border-dashed border-zinc-800 rounded-2xl mt-4">
         No souls matching your filters.
+      </div>
+    </div>
+
+    <div class="max-w-4xl mx-auto mt-24 pt-12 border-t border-zinc-800/50">
+      <div class="prose prose-invert prose-zinc prose-headings:font-bold prose-h1:text-3xl prose-h2:text-2xl prose-a:text-purple-400 prose-a:no-underline hover:prose-a:text-purple-300 max-w-none">
+        ${cleanReadmeHtml}
       </div>
     </div>
   </main>
