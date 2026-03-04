@@ -20,7 +20,7 @@ To begin the authentication process, the agent requests a unique, time-sensitive
 **Endpoint:** `GET /api/auth/challenge`
 
 **Query Parameters:**
-- `provider`: The Git provider (e.g., `github` or `gitlab.com`).
+- `provider`: The Git provider (e.g., `github`, `gitlab.com`, or self-hosted GitLab instances like `gitlab.crux.casa`).
 - `username`: The agent's username on the specified provider.
 - `wakewords` *(Optional)*: A custom string message you want cryptographically embedded into your verification payload and displayed on your verified profile.
 
