@@ -35,31 +35,83 @@ export function verifyChallenge(challenge: string, provider: string, username: s
 }
 
 export function verifySignature(challenge: string, signatureRawText: string, publicKey: string): boolean {
-    // Determine user namespace identifier
-    // We allow any identifier, but to be clean, let's use the public key hash or just 'user'
-    const identifier = 'user';
-
-    const randomSuffix = crypto.randomBytes(8).toString('hex');
-    const tmpDir = os.tmpdir();
-
-    const allowedSignersPath = path.join(tmpDir, `allowed_signers_${randomSuffix}`);
-    const challengePath = path.join(tmpDir, `chal_${randomSuffix}`);
-    const sigPath = path.join(tmpDir, `chal_${randomSuffix}.sig`);
-
     try {
-        fs.writeFileSync(allowedSignersPath, `${identifier} ${publicKey}\n`);
-        fs.writeFileSync(challengePath, challenge);
-        fs.writeFileSync(sigPath, signatureRawText);
+        const lines = signatureRawText.split('\\n').map(l => l.trim()).filter(l => l && !l.startsWith('-----'));
+        const sigBuffer = Buffer.from(lines.join(''), 'base64');
 
-        execSync(`ssh-keygen -Y verify -f ${allowedSignersPath} -I ${identifier} -n file -s ${sigPath} < ${challengePath}`, { stdio: 'ignore' });
+        let offset = 0;
+        function readString() {
+            const len = sigBuffer.readUInt32BE(offset);
+            offset += 4;
+            const buf = sigBuffer.subarray(offset, offset + len);
+            offset += len;
+            return buf;
+        }
 
-        return true;
+        const magic = sigBuffer.subarray(offset, offset + 6).toString('utf8');
+        if (magic !== 'SSHSIG') return false;
+        offset += 6;
+
+        const version = sigBuffer.readUInt32BE(offset);
+        if (version !== 1) return false;
+        offset += 4;
+
+        readString(); // pubKey
+        const namespace = readString();
+        const reserved = readString();
+        const hashAlg = readString();
+        const hashAlgStr = hashAlg.toString('utf8');
+
+        const signatureBlob = readString();
+        let sigBlobOffset = 0;
+        const sigTypeLen = signatureBlob.readUInt32BE(sigBlobOffset);
+        sigBlobOffset += 4;
+        const sigType = signatureBlob.subarray(sigBlobOffset, sigBlobOffset + sigTypeLen).toString('utf8');
+        sigBlobOffset += sigTypeLen;
+        const rawSigLen = signatureBlob.readUInt32BE(sigBlobOffset);
+        sigBlobOffset += 4;
+        const rawSig = signatureBlob.subarray(sigBlobOffset, sigBlobOffset + rawSigLen);
+
+        const hashValue = crypto.createHash(hashAlgStr).update(Buffer.from(challenge, 'utf8')).digest();
+
+        const signedDataParts = [];
+        signedDataParts.push(Buffer.from('SSHSIG', 'utf8'));
+
+        function encodeString(buf: Buffer) {
+            const lenBuf = Buffer.alloc(4);
+            lenBuf.writeUInt32BE(buf.length, 0);
+            return Buffer.concat([lenBuf, buf]);
+        }
+
+        signedDataParts.push(encodeString(namespace));
+        signedDataParts.push(encodeString(reserved));
+        signedDataParts.push(encodeString(hashAlg));
+        signedDataParts.push(encodeString(hashValue));
+
+        const signedData = Buffer.concat(signedDataParts);
+
+        const parsedKey = sshpk.parseKey(publicKey.trim(), 'ssh');
+        let isVerified = false;
+
+        if (sigType === 'ssh-ed25519') {
+            const keyObj = crypto.createPublicKey({
+                key: parsedKey.toBuffer('pem'),
+                format: 'pem'
+            });
+            isVerified = crypto.verify(undefined, signedData, keyObj, rawSig);
+        } else if (sigType.includes('rsa')) {
+            const keyObj = crypto.createPublicKey({
+                key: parsedKey.toBuffer('pem'),
+                format: 'pem'
+            });
+            isVerified = crypto.verify(hashAlgStr, signedData, keyObj, rawSig);
+        } else {
+            return false;
+        }
+
+        return isVerified;
     } catch (err) {
-        console.error('Signature verification via ssh-keygen failed');
+        console.error('Native signature verification failed:', err);
         return false;
-    } finally {
-        try { if (fs.existsSync(allowedSignersPath)) fs.unlinkSync(allowedSignersPath); } catch (e) { }
-        try { if (fs.existsSync(challengePath)) fs.unlinkSync(challengePath); } catch (e) { }
-        try { if (fs.existsSync(sigPath)) fs.unlinkSync(sigPath); } catch (e) { }
     }
 }
