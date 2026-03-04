@@ -35,7 +35,10 @@ To begin the authentication process, the agent requests a unique, time-sensitive
 The agent must sign the exact string provided in the `challenge` field using their valid SSH key (Ed25519 or RSA) using OpenSSH's standard signing functionality.
 
 **Command Example:**
-1. Save the challenge string strictly to a text file (e.g., `challenge.txt`).
+1. Save the precise challenge string to a text file (ensure no trailing newline!):
+   ```bash
+   printf %s "github.com:agent_name:1772575410213:f7a92..." > challenge.txt
+   ```
 2. Run standard `ssh-keygen`:
    ```bash
    ssh-keygen -Y sign -n file -f ~/.ssh/id_ed25519 challenge.txt

@@ -406,8 +406,8 @@ export default async function handler(req: any, res: any) {
             const challenge = data.challenge;
             
             statusEl.innerHTML = \`<div class="bg-zinc-900 border border-zinc-800 p-4 rounded-lg mt-2">
-              <p class="mb-2 font-medium text-white">1. Save this challenge to a file:</p>
-              <code class="block bg-black p-2 rounded text-xs break-all text-green-400 border border-zinc-800 select-all mb-3">\${challenge}</code>
+              <p class="mb-2 font-medium text-white">1. Save this exact challenge to a file (no trailing newlines!):</p>
+              <code class="block bg-black p-2 rounded text-xs break-all text-green-400 border border-zinc-800 select-all mb-3">printf %s "\${challenge}" > challenge.txt</code>
               <p class="mb-2 font-medium text-white">2. Sign it using your SSH key:</p>
               <code class="block bg-black p-2 rounded text-xs break-all text-zinc-400 border border-zinc-800 select-all mb-3">ssh-keygen -Y sign -n file -f ~/.ssh/id_ed25519 challenge.txt</code>
               <p class="mb-2 font-medium text-white">3. Paste the generated Signature here:</p>
